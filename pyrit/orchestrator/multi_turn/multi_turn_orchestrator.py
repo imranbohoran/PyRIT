@@ -2,6 +2,8 @@
 # Licensed under the MIT license.
 
 import asyncio
+import base64
+import hashlib
 import logging
 import uuid
 from abc import abstractmethod
@@ -201,6 +203,23 @@ class MultiTurnOrchestrator(Orchestrator):
             prepended_conversation (str): The prepended conversation to send to the objective target.
         """
         self._prepended_conversation = prepended_conversation
+
+    def get_identifier_with_objective(self, objective: str) -> dict[str, str]:
+        """
+
+        Args:
+            objective (str): The objective of the attack
+
+        Returns:
+             Dict[str,str]: A dictionary with orchestrator information
+        """
+        if not objective:
+            raise ValueError('objective is required')
+
+        orchestrator_identifier = self.get_identifier()
+        orchestrator_identifier["objective_base64"] = str(base64.b64encode(objective.encode('utf-8')), encoding='utf-8')
+        orchestrator_identifier["objective_id"] = hashlib.md5(objective.encode('utf-8')).hexdigest()
+        return orchestrator_identifier
 
     def _set_globals_based_on_role(self, last_message: PromptRequestPiece):
         """Sets the global variables of self._last_prepended_user_message and self._last_prepended_assistant_message
