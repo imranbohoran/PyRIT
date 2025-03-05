@@ -7,6 +7,7 @@ import logging
 from typing import Any, List, Optional
 from uuid import uuid4
 
+from pyrit.models.attack_configuration import AttackConfiguration
 from pyrit.common.batch_helper import batch_task_async
 from pyrit.exceptions import EmptyResponseException
 from pyrit.memory import CentralMemory, MemoryInterface
@@ -49,6 +50,7 @@ class PromptNormalizer(abc.ABC):
         sequence: int = -1,
         labels: Optional[dict[str, str]] = None,
         orchestrator_identifier: Optional[dict[str, str]] = None,
+        attack_configuration: AttackConfiguration
     ) -> PromptRequestResponse:
         """
         Sends a single request to a target.
@@ -65,6 +67,7 @@ class PromptNormalizer(abc.ABC):
             labels (Optional[dict[str, str]], optional): Labels associated with the request. Defaults to None.
             orchestrator_identifier (Optional[dict[str, str]], optional): Identifier for the orchestrator. Defaults to
                 None.
+            attack_configuration: The attack configuration for this prompt
 
             Raises:
             Exception: If an error occurs during the request processing.
@@ -81,6 +84,7 @@ class PromptNormalizer(abc.ABC):
             sequence=sequence,
             labels=labels,
             orchestrator_identifier=orchestrator_identifier,
+            attack_configuration=attack_configuration
         )
 
         await self._calc_hash(request=request)
@@ -289,6 +293,7 @@ class PromptNormalizer(abc.ABC):
         sequence: int,
         labels: dict[str, str],
         orchestrator_identifier: Optional[dict[str, str]],
+        attack_configuration: AttackConfiguration
     ) -> PromptRequestResponse:
         """
         Builds a prompt request response based on the given parameters.
@@ -324,6 +329,7 @@ class PromptNormalizer(abc.ABC):
                 prompt_metadata=seed_prompt.metadata,
                 prompt_target_identifier=target.get_identifier(),
                 orchestrator_identifier=orchestrator_identifier,
+                attack_configuration=attack_configuration,
                 original_value_data_type=seed_prompt.data_type,
             )
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
+from pyrit.models.attack_configuration import AttackConfiguration
 from pyrit.common.path import DATASETS_PATH
 from pyrit.common.utils import combine_dict
 from pyrit.exceptions import (
@@ -149,7 +150,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
         return attack_prompt
 
     async def run_attack_async(
-        self, *, objective: str, memory_labels: Optional[dict[str, str]] = None
+        self, *, attack_configuration: AttackConfiguration, memory_labels: Optional[dict[str, str]] = None
     ) -> MultiTurnAttackResult:
         """
         Executes the Crescendo Attack asynchronously.
@@ -160,8 +161,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
         achieved or maximum turns/backtracks are reached.
 
         Args:
-            objective (str): The ultimate goal or purpose of the attack, which the orchestrator attempts
-                to achieve through multiple turns of interaction with the target.
+            attack_configuration (AttackConfiguration): The attack configuration for the attack.
             memory_labels (dict[str, str], Optional): A free-form dictionary of additional labels to apply to the
                 prompts throughout the attack. Any labels passed in will be combined with self._global_memory_labels
                 (from the GLOBAL_MEMORY_LABELS environment variable) into one dictionary. In the case of collisions,
@@ -188,7 +188,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
         updated_memory_labels = combine_dict(existing_dict=self._global_memory_labels, new_dict=memory_labels)
 
         adversarial_chat_system_prompt = self._adversarial_chat_system_seed_prompt.render_template_value(
-            objective=objective,
+            objective=attack_configuration.conversation_objective,
             max_turns=self._max_turns,
         )
 
@@ -197,11 +197,12 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
             conversation_id=adversarial_chat_conversation_id,
             orchestrator_identifier=self.get_identifier(),
             labels=updated_memory_labels,
+            attack_configuration=attack_configuration,
         )
 
         # Prepare the conversation by adding any provided messages to memory.
         # If there is no prepended conversation, the turn count is 1.
-        turn_num = self._prepare_conversation(new_conversation_id=objective_target_conversation_id)
+        turn_num = self._prepare_conversation(new_conversation_id=objective_target_conversation_id, attack_configuration=attack_configuration)
 
         backtrack_count = 0
         achieved_objective = False
@@ -220,11 +221,12 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
                 attack_prompt = await self._get_attack_prompt(
                     adversarial_chat_conversation_id=adversarial_chat_conversation_id,
                     refused_text=refused_text,
-                    objective=objective,
+                    objective=attack_configuration.conversation_objective,
                     turn_num=turn_num,
                     max_turns=self._max_turns,
                     objective_score=objective_score,
                     memory_labels=updated_memory_labels,
+                    attack_configuration=attack_configuration
                 )
 
             refused_text = ""
@@ -234,6 +236,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
                 attack_prompt=attack_prompt,
                 objective_target_conversation_id=objective_target_conversation_id,
                 memory_labels=updated_memory_labels,
+                attack_configuration=attack_configuration
             )
 
             if backtrack_count < self._max_backtracks:
@@ -266,7 +269,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
                 logger.info("Max Backtrack Limit Reached, continuing to next turn")
 
             objective_score = (
-                await self._objective_scorer.score_async(request_response=last_response, task=objective)
+                await self._objective_scorer.score_async(request_response=last_response, task=attack_configuration.conversation_objective)
             )[0]
 
             logger.info(
@@ -301,7 +304,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
         return MultiTurnAttackResult(
             conversation_id=objective_target_conversation_id,
             achieved_objective=achieved_objective,
-            objective=objective,
+            objective=attack_configuration.conversation_objective,
         )
 
     @pyrit_json_retry
@@ -315,6 +318,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
         max_turns: int,
         objective_score: Score = None,
         memory_labels: Optional[dict[str, str]] = None,
+        attack_configuration: AttackConfiguration
     ) -> str:
 
         prompt_text = (
@@ -355,6 +359,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
                     conversation_id=adversarial_chat_conversation_id,
                     target=self._adversarial_chat,
                     orchestrator_identifier=self.get_identifier(),
+                    attack_configuration=attack_configuration,
                     labels=memory_labels,
                 )
             )
@@ -388,6 +393,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
         attack_prompt: str,
         objective_target_conversation_id: str = None,
         memory_labels: Optional[dict[str, str]] = None,
+        attack_configuration: AttackConfiguration
     ) -> PromptRequestPiece:
 
         # Sends the attack prompt to the objective target and returns the response
@@ -403,6 +409,7 @@ class CrescendoOrchestrator(MultiTurnOrchestrator):
                 conversation_id=objective_target_conversation_id,
                 request_converter_configurations=[converter_configuration],
                 orchestrator_identifier=self.get_identifier(),
+                attack_configuration=attack_configuration,
                 labels=memory_labels,
             )
         ).request_pieces[0]
